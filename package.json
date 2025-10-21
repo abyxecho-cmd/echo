@@ -1,0 +1,13 @@
+{
+  "name": "render-discord-bot",
+  "version": "1.0.0",
+  "description": "Render üzerinde çalışan Discord botu.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "axios": "^1.7.2"
+  }
+}
