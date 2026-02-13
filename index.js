@@ -5,35 +5,51 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get("/", (req, res) => {
-  res.send("Bot aktif ve Render üzerinde çalışıyor!");
+  res.send("Botlar aktif, yazıyor animasyonu devrede!");
 });
 
 app.listen(PORT, () => {
   console.log(`Sunucu ${PORT} portunda dinleniyor.`);
 });
 
-const token = process.env.TOKEN;
+// Environment değişkenlerini al
+const tokens = process.env.TOKENS ? process.env.TOKENS.split(',') : [];
 const channelId = process.env.CHANNEL_ID;
-const message = process.env.MESSAGE;
+const message1 = process.env.MESSAGE1;
+const message2 = process.env.MESSAGE2;
 
-if (!token || !channelId || !message) {
-    console.error("HATA: Environment (gizli değişkenler) bölümünde TOKEN, CHANNEL_ID veya MESSAGE eksik!");
+if (tokens.length === 0 || !channelId || !message1 || !message2) {
+    console.error("HATA: Değişkenler eksik (TOKENS, CHANNEL_ID, MESSAGE1 veya MESSAGE2)!");
 } else {
-  
-    setInterval(sendMessage, 4000);
+    console.log(`${tokens.length} adet hesap için döngü başlıyor...`);
+    
+    tokens.forEach((token, index) => {
+        const cleanToken = token.trim();
+        const msgToSend = (index % 2 === 0) ? message1 : message2;
+
+        // Her 1 saniyede bir işlem yap
+        setInterval(() => {
+            sendTypingAndMessage(cleanToken, msgToSend);
+        }, 1000); 
+    });
 }
 
-function sendMessage() {
-  axios.post(`https://discord.com/api/v9/channels/${channelId}/messages`, {
-    content: message
-  }, {
-    headers: {
-      "Authorization": token,
-      "Content-Type": "application/json"
+async function sendTypingAndMessage(token, content) {
+    const url = `https://discord.com/api/v9/channels/${channelId}`;
+    const headers = {
+        "Authorization": token,
+        "Content-Type": "application/json"
+    };
+
+    try {
+        // 1. "Yazıyor..." animasyonunu tetikle
+        await axios.post(`${url}/typing`, {}, { headers });
+
+        // 2. Mesajı gönder
+        await axios.post(`${url}/messages`, { content: content }, { headers });
+        
+        console.log(`✅ [${token.substring(0, 5)}...] Yazıyor ve mesaj attı: "${content}"`);
+    } catch (err) {
+        console.error("❌ İşlem başarısız:", err.response?.status, err.response?.data?.message);
     }
-  }).then(() => {
-    console.log(`✅ Mesaj başarıyla gönderildi: "${message}"`);
-  }).catch((err) => {
-    console.error("❌ Mesaj gönderilemedi. Hata:", err.response?.status, err.response?.data);
-  });
 }
