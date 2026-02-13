@@ -6,7 +6,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get("/", (req, res) => {
-  res.send("Sistem Aktif: 3 Mesajlı ve Zincirleme Mod çalışıyor.");
+  res.send("Güvenli Mod Aktif: Hesaplar 10sn aralıkla, 2sn farkla çalışıyor.");
 });
 
 app.listen(PORT, () => {
@@ -23,9 +23,10 @@ if (tokens.length === 0 || !channelId || !m1 || !m2 || !m3) {
     console.error("HATA: Değişkenler eksik!");
 } else {
     tokens.forEach((token, index) => {
+        // Hesaplar arası çakışmayı önlemek için 2 saniye farkla başlatıyoruz
         setTimeout(() => {
             startBot(token, index + 1);
-        }, index * 1000); // Hesaplar arası 1 saniye gecikme
+        }, index * 2000); 
     });
 }
 
@@ -36,24 +37,31 @@ function startBot(token, botNumber) {
     const msgs = [m1, m2, m3];
     let step = 0;
 
+    // GÜVENLİ DÖNGÜ: Her hesap 10 saniyede bir mesaj atar
     setInterval(async () => {
         const currentMsg = msgs[step];
         try {
+            // Yazıyor sinyali (Hata alsa da döngüyü bozmaz)
             axios.post(`https://discord.com/api/v9/channels/${channelId}/typing`, {}, {
                 headers: { "Authorization": token }
             }).catch(() => {});
 
+            // Mesaj gönderimi
             await axios.post(`https://discord.com/api/v9/channels/${channelId}/messages`, 
                 { content: currentMsg }, 
                 { headers: { "Authorization": token, "Content-Type": "application/json" } }
             );
 
-            console.log(`✅ [${label}] Gönderdi: ${currentMsg.substring(0, 15)}...`);
+            console.log(`✅ [${label}] Mesaj Başarılı.`);
             step = (step + 1) % msgs.length;
         } catch (err) {
-            console.error(`❌ [${label}] Hata: ${err.response?.status || "Bağlantı"}`);
+            if (err.response?.status === 429) {
+                console.error(`⚠️ [${label}] RATE LIMIT: Discord yavaşlamanı istiyor!`);
+            } else {
+                console.error(`❌ [${label}] Hata: ${err.response?.status || "Bağlantı"}`);
+            }
         }
-    }, 5000); // Her hesap kendi içinde 5 saniyede bir atar
+    }, 10000); // 10 saniyeye çıkarıldı (Kısıtlama yememek için)
 }
 
 function connectToGateway(token, label) {
