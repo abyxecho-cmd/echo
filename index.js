@@ -6,57 +6,73 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get("/", (req, res) => {
-  res.send("Sınırsız Token Desteği: Tüm hesaplar sırayla MESSAGE1 ve MESSAGE2 atıyor!");
+  res.send("Zincirleme Bot Sistemi Aktif: Hesaplar 1sn arayla nöbetleşe atıyor.");
 });
 
 app.listen(PORT, () => {
-  console.log(`Sunucu ${PORT} portunda aktif.`);
+  console.log(`Sunucu ${PORT} portunda dinleniyor.`);
 });
 
-// Değişkenleri al ve temizle
 const tokens = process.env.TOKENS ? process.env.TOKENS.split(',').map(t => t.trim()) : [];
 const channelId = process.env.CHANNEL_ID;
 const message1 = process.env.MESSAGE1;
 const message2 = process.env.MESSAGE2;
 
 if (tokens.length === 0 || !channelId || !message1 || !message2) {
-    console.error("HATA: Değişkenler eksik! Lütfen TOKENS, CHANNEL_ID, MESSAGE1 ve MESSAGE2 ayarlarını kontrol edin.");
+    console.error("HATA: Değişkenler eksik! TOKENS, CHANNEL_ID, MESSAGE1, MESSAGE2 kontrol et.");
 } else {
-    console.log(`${tokens.length} adet hesap yüklendi. Döngü başlıyor...`);
+    console.log(`${tokens.length} hesap için zincirleme döngü kuruluyor...`);
 
-    // Her token için sistemi başlat
     tokens.forEach((token, index) => {
-        // Çakışmayı önlemek için her hesabı (index * 1000ms) kadar geciktirerek başlatıyoruz
-        // Örneğin: 1. hesap 0sn, 2. hesap 1sn, 3. hesap 2sn sonra başlar.
-        const startDelay = index * 1000; 
+        // ZİNCİRLEME MANTIK:
+        // Her hesap bir sonrakinden 1 saniye sonra başlar.
+        // Ama her hesap kendi mesajını 3 saniyede bir gönderir.
+        const delay = index * 1000; 
 
         setTimeout(() => {
-            setupAccount(token, `Hesap-${index + 1}`);
-        }, startDelay);
+            startBot(token, index + 1);
+        }, delay);
     });
 }
 
-function setupAccount(token, label) {
-    // 7/24 Aktif tutma ve Rahatsız Etmeyin modu
+function startBot(token, botNumber) {
+    const label = `Hesap-${botNumber}`;
+    
+    // 7/24 Aktiflik (Rahatsız Etmeyin)
     connectToGateway(token, label);
 
-    const messages = [message1, message2];
-    let msgIndex = 0;
+    const msgs = [message1, message2];
+    let step = 0;
 
-    // Her hesap kendi içinde 3 saniyede bir mesaj atar
+    // Her hesap 3 saniyede bir kendi sırasındaki mesajı atar
     setInterval(async () => {
-        const currentMessage = messages[msgIndex];
-        await sendAction(token, currentMessage, label);
+        const currentMsg = msgs[step];
         
-        // Bir sonraki mesaj indexine geç (0 -> 1 -> 0)
-        msgIndex = (msgIndex + 1) % messages.length;
-    }, 3000); 
+        try {
+            // Yazıyor sinyali
+            axios.post(`https://discord.com/api/v9/channels/${channelId}/typing`, {}, {
+                headers: { "Authorization": token }
+            }).catch(() => {});
+
+            // Mesaj gönderimi
+            await axios.post(`https://discord.com/api/v9/channels/${channelId}/messages`, 
+                { content: currentMsg }, 
+                { headers: { "Authorization": token, "Content-Type": "application/json" } }
+            );
+
+            console.log(`✅ [${label}] Gönderdi: ${currentMsg}`);
+            
+            // Mesaj değiştir (M1 -> M2 -> M1...)
+            step = (step + 1) % msgs.length;
+
+        } catch (err) {
+            console.error(`❌ [${label}] Hata: ${err.response?.status || "Bağlantı"}`);
+        }
+    }, 3000); // Kendi döngüsü 3 saniye
 }
 
-// Discord 7/24 Aktiflik Bağlantısı
 function connectToGateway(token, label) {
     const ws = new WebSocket('wss://gateway.discord.gg/?v=9&encoding=json');
-
     ws.on('open', () => {
         ws.send(JSON.stringify({
             op: 2,
@@ -67,40 +83,11 @@ function connectToGateway(token, label) {
             }
         }));
     });
-
     ws.on('message', (data) => {
-        const payload = JSON.parse(data);
-        if (payload.op === 10) {
-            setInterval(() => {
-                if (ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ op: 1, d: null }));
-                }
-            }, payload.d.heartbeat_interval);
+        const p = JSON.parse(data);
+        if (p.op === 10) {
+            setInterval(() => { if(ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ op: 1, d: null })); }, p.d.heartbeat_interval);
         }
     });
-
-    ws.on('close', () => {
-        // Bağlantı koparsa 5 saniye sonra tekrar dene
-        setTimeout(() => connectToGateway(token, label), 5000);
-    });
-}
-
-async function sendAction(token, content, label) {
-    const url = `https://discord.com/api/v9/channels/${channelId}`;
-    const headers = { "Authorization": token, "Content-Type": "application/json" };
-
-    try {
-        // "Yazıyor..." animasyonu
-        axios.post(`${url}/typing`, {}, { headers }).catch(() => {});
-        
-        // Mesajı gönder
-        await axios.post(`${url}/messages`, { content }, { headers });
-        console.log(`✅ [${label}] Mesaj Başarılı: ${content.substring(0, 20)}...`);
-    } catch (err) {
-        if (err.response?.status === 429) {
-            console.error(`⚠️ [${label}] Rate Limit!`);
-        } else {
-            console.error(`❌ [${label}] Hata:`, err.response?.status || "Bağlantı Sorunu");
-        }
-    }
+    ws.on('close', () => setTimeout(() => connectToGateway(token, label), 5000));
 }
