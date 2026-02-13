@@ -5,51 +5,60 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get("/", (req, res) => {
-  res.send("Botlar aktif, yazıyor animasyonu devrede!");
+  res.send("Botlar 1 saniye aralıkla sırayla çalışıyor.");
 });
 
 app.listen(PORT, () => {
-  console.log(`Sunucu ${PORT} portunda dinleniyor.`);
+  console.log(`Sunucu ${PORT} portunda aktif.`);
 });
 
-// Environment değişkenlerini al
-const tokens = process.env.TOKENS ? process.env.TOKENS.split(',') : [];
+// Environment değişkenlerini al ve temizle
+const tokens = process.env.TOKENS ? process.env.TOKENS.split(',').map(t => t.trim()) : [];
 const channelId = process.env.CHANNEL_ID;
 const message1 = process.env.MESSAGE1;
 const message2 = process.env.MESSAGE2;
 
-if (tokens.length === 0 || !channelId || !message1 || !message2) {
-    console.error("HATA: Değişkenler eksik (TOKENS, CHANNEL_ID, MESSAGE1 veya MESSAGE2)!");
+if (tokens.length < 2 || !channelId || !message1 || !message2) {
+    console.error("HATA: Değişkenler eksik! (TOKENS, CHANNEL_ID, MESSAGE1, MESSAGE2)");
 } else {
-    console.log(`${tokens.length} adet hesap için döngü başlıyor...`);
-    
-    tokens.forEach((token, index) => {
-        const cleanToken = token.trim();
-        const msgToSend = (index % 2 === 0) ? message1 : message2;
+    console.log("Sıralı mod başlatıldı: Her mesaj arası 1 saniye.");
 
-        // Her 1 saniyede bir işlem yap
-        setInterval(() => {
-            sendTypingAndMessage(cleanToken, msgToSend);
-        }, 1000); 
-    });
+    let currentAccount = 0; // 0: Hesap 1, 1: Hesap 2
+
+    // Ana Döngü: Her 1 saniyede bir tetiklenir
+    setInterval(async () => {
+        const token = tokens[currentAccount];
+        const content = (currentAccount === 0) ? message1 : message2;
+        const label = `Hesap ${currentAccount + 1}`;
+
+        await sendAction(token, content, label);
+
+        // Sırayı değiştir: 0 ise 1, 1 ise 0 yap
+        currentAccount = (currentAccount + 1) % 2;
+
+    }, 1000); // 1 saniye bekleme süresi
 }
 
-async function sendTypingAndMessage(token, content) {
+async function sendAction(token, content, label) {
     const url = `https://discord.com/api/v9/channels/${channelId}`;
-    const headers = {
-        "Authorization": token,
-        "Content-Type": "application/json"
+    const headers = { 
+        "Authorization": token, 
+        "Content-Type": "application/json" 
     };
 
     try {
-        // 1. "Yazıyor..." animasyonunu tetikle
-        await axios.post(`${url}/typing`, {}, { headers });
-
-        // 2. Mesajı gönder
-        await axios.post(`${url}/messages`, { content: content }, { headers });
+        // "Yazıyor..." animasyonu gönder
+        axios.post(`${url}/typing`, {}, { headers }).catch(() => {});
         
-        console.log(`✅ [${token.substring(0, 5)}...] Yazıyor ve mesaj attı: "${content}"`);
+        // Mesajı gönder
+        await axios.post(`${url}/messages`, { content }, { headers });
+        
+        console.log(`✅ [${label}] Mesaj gönderildi: ${content}`);
     } catch (err) {
-        console.error("❌ İşlem başarısız:", err.response?.status, err.response?.data?.message);
+        if (err.response?.status === 429) {
+            console.error(`⚠️ [${label}] Rate Limit: Çok hızlı!`);
+        } else {
+            console.error(`❌ [${label}] Hata:`, err.response?.status);
+        }
     }
 }
