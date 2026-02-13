@@ -6,7 +6,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get("/", (req, res) => {
-  res.send("Zincirleme Bot Sistemi Aktif: Hesaplar 1sn arayla nöbetleşe atıyor.");
+  res.send("Sistem Aktif: Zincirleme ve Sıralı Mesaj Modu çalışıyor.");
 });
 
 app.listen(PORT, () => {
@@ -21,54 +21,41 @@ const message2 = process.env.MESSAGE2;
 if (tokens.length === 0 || !channelId || !message1 || !message2) {
     console.error("HATA: Değişkenler eksik! TOKENS, CHANNEL_ID, MESSAGE1, MESSAGE2 kontrol et.");
 } else {
-    console.log(`${tokens.length} hesap için zincirleme döngü kuruluyor...`);
-
     tokens.forEach((token, index) => {
-        // ZİNCİRLEME MANTIK:
-        // Her hesap bir sonrakinden 1 saniye sonra başlar.
-        // Ama her hesap kendi mesajını 3 saniyede bir gönderir.
-        const delay = index * 1000; 
-
+        // Her token bir öncekinden 1 saniye sonra devreye girer (Zincirleme)
         setTimeout(() => {
             startBot(token, index + 1);
-        }, delay);
+        }, index * 1000);
     });
 }
 
 function startBot(token, botNumber) {
     const label = `Hesap-${botNumber}`;
-    
-    // 7/24 Aktiflik (Rahatsız Etmeyin)
     connectToGateway(token, label);
 
     const msgs = [message1, message2];
     let step = 0;
 
-    // Her hesap 3 saniyede bir kendi sırasındaki mesajı atar
     setInterval(async () => {
         const currentMsg = msgs[step];
-        
         try {
-            // Yazıyor sinyali
+            // Yazıyor...
             axios.post(`https://discord.com/api/v9/channels/${channelId}/typing`, {}, {
                 headers: { "Authorization": token }
             }).catch(() => {});
 
-            // Mesaj gönderimi
+            // Mesaj Gönder
             await axios.post(`https://discord.com/api/v9/channels/${channelId}/messages`, 
                 { content: currentMsg }, 
                 { headers: { "Authorization": token, "Content-Type": "application/json" } }
             );
 
-            console.log(`✅ [${label}] Gönderdi: ${currentMsg}`);
-            
-            // Mesaj değiştir (M1 -> M2 -> M1...)
-            step = (step + 1) % msgs.length;
-
+            console.log(`✅ [${label}] Sıradaki mesajı attı: ${currentMsg}`);
+            step = (step + 1) % msgs.length; // 1 -> 2 -> 1 döngüsü
         } catch (err) {
-            console.error(`❌ [${label}] Hata: ${err.response?.status || "Bağlantı"}`);
+            console.error(`❌ [${label}] Mesaj hatası: ${err.response?.status}`);
         }
-    }, 3000); // Kendi döngüsü 3 saniye
+    }, 3000); // Her hesap kendi içinde 3 saniyede bir atar
 }
 
 function connectToGateway(token, label) {
